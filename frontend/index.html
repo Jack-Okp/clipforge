@@ -83,6 +83,26 @@
   .pv .barpv { position: absolute; left: 0; bottom: 0; height: 4px; width: 60%; display: none; }
   .pv .wmpv { position: absolute; width: 26%; height: 9%; background: #c0f; border-radius: 2px; display: none; }
   .pvnote { font-size: 12px; color: var(--muted); max-width: 150px; margin-top: 6px; }
+  .vwrap { position: relative; background: #000; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .vwrap video { width: 100%; height: auto; max-height: 60vh; display: block; }
+  .cropbox { position: absolute; border: 2px solid var(--accent); box-shadow: 0 0 0 9999px rgba(0,0,0,.55); cursor: move; touch-action: none; }
+  .ed-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .ed-grid { grid-template-columns: 1fr; } }
+  .tlbar { position: relative; height: 54px; background: var(--panel2); border-radius: 8px; border: 1px solid var(--line); touch-action: none; cursor: pointer; user-select: none; }
+  .tlsel { position: absolute; top: 0; bottom: 0; background: rgba(124,92,255,.28); border-left: 3px solid var(--accent); border-right: 3px solid var(--accent); }
+  .tlh { position: absolute; top: -4px; bottom: -4px; width: 14px; margin-left: -7px; background: var(--accent); border-radius: 5px; cursor: ew-resize; z-index: 2; }
+  .tlplay { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; z-index: 1; pointer-events: none; }
+  .tlbr { position: absolute; bottom: 0; height: 8px; background: var(--warn); border-radius: 2px; pointer-events: none; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; max-height: 240px; overflow: auto; padding: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+  .chip { border: 1px solid var(--line); background: var(--panel2); color: var(--text); border-radius: 6px; padding: 2px 8px; font: inherit; cursor: pointer; }
+  .chip.sel { outline: 2px solid var(--accent); }
+  .chip.cut { text-decoration: line-through; color: var(--bad); }
+  .chip.hid { opacity: .45; font-style: italic; }
+  .chip.edt { border-color: var(--accent); }
+  .brl { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .brl img { width: 64px; height: 36px; object-fit: cover; border-radius: 4px; background: #000; }
+  textarea { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: inherit; width: 100%; }
+  .hc { display: flex; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line); }
 </style>
 </head>
 <body>
@@ -122,7 +142,7 @@ function go(view, id = null) {
   current = { view, id };
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   $('#nav-' + (view === 'settings' ? 'settings' : 'projects')).classList.add('active');
-  ({ projects: viewProjects, project: viewProject, settings: viewSettings })[view]();
+  ({ projects: viewProjects, project: viewProject, settings: viewSettings, editor: viewEditor })[view]();
 }
 
 /* ---------------- projects list ---------------- */
@@ -130,42 +150,63 @@ async function viewProjects() {
   $('#view').innerHTML = `
     <h1>New project</h1>
     <div class="card">
-      <div class="row">
-        <input id="url" type="text" class="grow" placeholder="Paste a YouTube or video link">
-        <button class="btn" onclick="submitUrl()">Find clips</button>
-      </div>
+      <div class="field" style="margin-top:0"><label>Video links (one per line, they are processed in order)</label>
+        <textarea id="url" rows="2" placeholder="Paste one or more YouTube or video links"></textarea></div>
       <div class="row" style="margin-top:12px">
-        <span class="muted small">or upload a file:</span>
-        <input id="file" type="file" accept="video/*">
-        <button class="btn ghost" onclick="submitFile()">Upload</button>
+        <span class="muted small">and/or files:</span>
+        <input id="file" type="file" accept="video/*" multiple>
       </div>
+      <div class="field"><label>Optional: what should the clips be about? (e.g. "moments about pricing", "funny stories")</label>
+        <input id="focus" type="text" maxlength="200" placeholder="Leave empty to let the AI pick the best moments"></div>
+      <div class="row" style="margin-top:14px"><button class="btn" onclick="submitNew()">Find clips</button></div>
       <div id="newErr"></div>
     </div>
-    <h1>Projects</h1><div id="list"></div>`;
+    <div class="row" style="margin-bottom:12px"><h1 style="margin:0" class="grow">Projects</h1>
+      <button class="btn ghost" onclick="queueAct('retry-failed')">Retry failed</button>
+      <button class="btn ghost" onclick="queueAct('cancel-all')">Cancel all</button></div>
+    <div id="list"></div>`;
   const draw = async () => {
     const list = await api('/projects');
     $('#list').innerHTML = list.length ? list.map(p => `
       <div class="card proj" onclick="go('project','${p.id}')">
         <div class="grow"><div class="title">${esc(p.title)}</div>
-          <div class="muted small">${p.duration ? fmt(p.duration) + ' · ' : ''}${p.created_at}</div></div>
+          <div class="muted small">${p.duration ? fmt(p.duration) + ' · ' : ''}${p.created_at}${p.focus ? ' · focus: ' + esc(p.focus) : ''}</div></div>
         ${p.status === 'running' || p.status === 'queued'
-          ? `<div style="width:160px"><div class="bar"><i style="width:${p.progress * 100}%"></i></div>
-             <div class="muted small">${STAGES[p.stage] || p.stage}</div></div>` : ''}
+          ? `<div style="width:170px"><div class="bar"><i style="width:${p.progress * 100}%"></i></div>
+             <div class="muted small">${p.queue_position > 0 ? 'Number ' + p.queue_position + ' in the queue' : (STAGES[p.stage] || p.stage)}</div></div>
+             <button class="btn danger" onclick="event.stopPropagation(); cancelOne('${p.id}')">Cancel</button>` : ''}
         <span class="badge ${p.status}">${p.status}</span>
       </div>`).join('') : '<p class="muted">No projects yet. Paste a link above to start.</p>';
   };
   draw(); timer = setInterval(draw, 2500);
 }
-async function submit(fd) {
-  try { const r = await api('/projects', { method: 'POST', body: fd }); go('project', r.id); }
-  catch (e) { $('#newErr').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+async function cancelOne(id) { await api(`/projects/${id}/cancel`, json('POST', {})); }
+async function queueAct(what) {
+  const d = await api('/queue/' + what, json('POST', {}));
+  if (what === 'cancel-all' && !d.cancelled) alert('Nothing is running or waiting.');
+  if (what === 'retry-failed' && !d.retried) alert('No failed projects.');
 }
-function submitUrl() { const fd = new FormData(); fd.append('url', $('#url').value); submit(fd); }
-function submitFile() { const f = $('#file').files[0]; if (!f) return; const fd = new FormData(); fd.append('file', f); submit(fd); }
+async function submitNew() {
+  const urls = $('#url').value.split('\n').map(x => x.trim()).filter(Boolean);
+  const files = [...$('#file').files], focus = $('#focus').value;
+  if (!urls.length && !files.length) { $('#newErr').innerHTML = '<div class="err">Paste a link or choose a video file first.</div>'; return; }
+  const ids = [], errs = [];
+  for (const item of [...urls, ...files]) {
+    const fd = new FormData();
+    typeof item === 'string' ? fd.append('url', item) : fd.append('file', item);
+    fd.append('focus', focus);
+    try { ids.push((await api('/projects', { method: 'POST', body: fd })).id); }
+    catch (e) { errs.push((typeof item === 'string' ? item : item.name) + ': ' + e.message); }
+  }
+  if (errs.length) { $('#newErr').innerHTML = errs.map(m => `<div class="err">${esc(m)}</div>`).join(''); if (!ids.length) return; }
+  if (ids.length === 1 && !errs.length) go('project', ids[0]);
+  else if (!errs.length) go('projects');
+}
 
 /* ---------------- one project ---------------- */
 async function viewProject() {
   const id = current.id;
+  try { KITS = await api('/kits'); } catch { KITS = []; }
   $('#view').innerHTML = '<div id="p"></div>';
   const draw = async () => {
     let p; try { p = await api('/projects/' + id); } catch { return go('projects'); }
@@ -188,13 +229,24 @@ async function viewProject() {
           <button class="btn ghost" onclick="act('rerun', document.getElementById('rerunProv').value)">Run again</button>
           <span class="grow"></span>
           <button class="btn danger" onclick="del()">Delete project</button></div>
+          <div class="field"><label>Focus (optional): what should the clips be about?</label>
+            <input type="text" id="rerunFocus" maxlength="200" value="${esc(p.focus || '')}" placeholder="e.g. moments about pricing. Empty = best moments overall"></div>
           <div class="muted small" style="margin-top:8px">Reuses the existing transcript, so switching models is quick.${p.provider_used ? ' Last run used: ' + esc(p.provider_used) + '.' : ''}</div></div>` : ''}
       ${!busy && p.clips.length ? `<details class="card" ontoggle="updatePreview('rs_')">
           <summary>Restyle clips (shape, captions, cleanup, overlays)</summary>
           <p class="muted small">Re-renders from the original video and reuses the transcript and the AI's picks, so it is much faster than starting over.</p>
+          ${KITS.length ? `<div class="field"><label>Start from a brand kit</label><select id="rs_kit">
+            <option value="">None (use the choices below)</option>${KITS.map(k => `<option value="${k.id}">${esc(k.name)}</option>`).join('')}</select>
+            <span class="muted small">A kit replaces the style choices below, apart from anything you change after picking it.</span></div>` : ''}
           ${styleBlock('rs_', SETTINGS)}
           <div class="row" style="margin-top:16px"><button class="btn" onclick="restyle(null)">Re-render all clips</button>
             <span class="muted small">Your logo is managed in Settings.</span></div></details>` : ''}
+      ${!busy && p.clips.some(c => c.file && !c.error) ? `<div class="card"><div class="row">
+          <a class="btn" href="/api/projects/${p.id}/zip">Download all clips (.zip with subtitles)</a>
+          <span class="grow"></span>
+          <input type="text" id="exportDir" style="width:300px" placeholder="Folder, e.g. C:\\Users\\you\\Videos\\clips">
+          <button class="btn ghost" onclick="exportFolder()">Save to folder</button></div>
+          <div id="exportMsg" class="small" style="margin-top:6px"></div></div>` : ''}
       <div class="clips">${p.clips.map(c => clipCard(p, c, busy)).join('')}</div>
       <div id="tr"></div>`;
     if (!busy) { clearInterval(timer); loadTranscript(id); updatePreview('rs_'); }
@@ -210,9 +262,18 @@ async function loadTranscript(id) {
       t.segments.map(s => `<p><b>${fmt(s.start)}</b>${esc(s.text)}</p>`).join('') + '</div></div>';
   } catch {}
 }
+let KITS = [];
 async function act(what, provider) {
-  await api(`/projects/${current.id}/${what}`, json('POST', provider ? { provider } : {}));
+  const body = provider ? { provider } : {};
+  if (what === 'rerun') body.focus = ($('#rerunFocus') || { value: '' }).value;
+  await api(`/projects/${current.id}/${what}`, json('POST', body));
   go('project', current.id);
+}
+async function exportFolder() {
+  const msg = $('#exportMsg'); msg.innerHTML = '<span class="muted">Copying…</span>';
+  try { const d = await api(`/projects/${current.id}/export-folder`, json('POST', { folder: $('#exportDir').value }));
+        msg.innerHTML = `<span class="ok">Saved ${d.count} clip(s) with subtitles to ${esc(d.folder)}</span>`; }
+  catch (e) { msg.innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
 }
 async function del() {
   if (!confirm('Delete this project and all its clips?')) return;
@@ -287,8 +348,47 @@ async function viewSettings() {
       <div class="field"><label>Max clip (s)</label><input id="max_clip_seconds" type="number" value="${esc(s.max_clip_seconds)}" style="width:90px"></div>
       <div class="field"><label>Max clips</label><input id="max_clips" type="number" value="${esc(s.max_clips)}" style="width:90px"></div>
     </div></div>
+    <h1>Brand kits</h1>
+    <div class="card"><p class="muted small" style="margin-top:0">A kit is a saved look: captions, colours, overlays, export choices and your current logo.
+      Apply one to every new project here, or to a single project's clips under "Restyle clips".</p>
+      <div id="kitList"></div>
+      <div class="row" style="margin-top:12px"><input id="kitName" type="text" placeholder="Kit name, e.g. My podcast" class="grow">
+        <button class="btn ghost" onclick="saveKit()">Save the style shown above as a kit</button></div><div id="kitMsg" class="small"></div></div>
+
+    <h1>B-roll footage</h1>
+    <div class="card"><p class="muted small" style="margin-top:0">Point this at a folder of your own videos and pictures. In the clip editor,
+      ClipForge suggests files whose names match what is said (e.g. <code>city_traffic.mp4</code> when the speaker says "traffic").
+      It matches names only; it does not look at the pictures.</p>
+      <div class="field"><label>Folder on this computer</label><input id="broll_folder" type="text" value="${esc(s.broll_folder)}" placeholder="C:\\Users\\you\\Videos\\broll"></div></div>
+
+    <h1>System check</h1>
+    <div class="card"><div class="row"><button class="btn ghost" onclick="runHealth()">Run system check</button>
+      <span class="muted small">Shows what is installed and what is missing.</span></div><div id="health" style="margin-top:10px"></div></div>
     <div class="row"><button class="btn" onclick="saveSettings()">Save settings</button><span id="saved"></span></div>`;
-  loadOllama(); updatePreview('');
+  loadOllama(); updatePreview(''); loadKits();
+}
+async function loadKits() {
+  const el = $('#kitList'); if (!el) return;
+  const kits = await api('/kits');
+  el.innerHTML = kits.length ? kits.map(k => `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)">
+      <b class="grow">${esc(k.name)}</b><span class="tag">${esc(k.opts.caption_style)} · ${esc(k.opts.output_aspect)}${k.has_logo ? ' · logo' : ''}</span>
+      <button class="btn ghost" onclick="applyKit(${k.id})">Use as default</button>
+      <button class="btn danger" onclick="delKit(${k.id})">Delete</button></div>`).join('')
+    : '<p class="muted small">No kits yet.</p>';
+}
+async function saveKit() {
+  const name = $('#kitName').value.trim(), msg = $('#kitMsg');
+  if (!name) { msg.innerHTML = '<span class="bad">Give the kit a name first</span>'; return; }
+  try { await api('/kits', json('POST', { name, opts: readStyle('') })); $('#kitName').value = ''; msg.innerHTML = '<span class="ok">Saved ✓</span>'; loadKits(); }
+  catch (e) { msg.innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
+}
+async function applyKit(id) { await api(`/kits/${id}/apply`, json('POST', {})); await loadSettings(); viewSettings(); }
+async function delKit(id) { if (confirm('Delete this kit?')) { await api('/kits/' + id, { method: 'DELETE' }); loadKits(); } }
+async function runHealth() {
+  const el = $('#health'); el.innerHTML = '<span class="muted">Checking…</span>';
+  const d = await api('/health');
+  el.innerHTML = d.checks.map(c => `<div class="hc"><span class="${c.ok ? 'ok' : 'bad'}" style="width:18px">${c.ok ? '✓' : '✗'}</span>
+    <b style="width:260px">${esc(c.label)}</b><span class="grow muted">${esc(c.detail)}${c.hint ? ' — ' + esc(c.hint) : ''}</span></div>`).join('');
 }
 function pick(id) {
   $('#llm_provider').value = id;
@@ -296,10 +396,11 @@ function pick(id) {
 }
 const STYLE_KEYS = ['output_aspect', 'layout', 'caption_style', 'caption_position', 'caption_color', 'highlight_color',
   'accent_color', 'remove_fillers', 'remove_silence', 'silence_gap', 'normalize_audio', 'hook_title', 'hook_seconds',
-  'progress_bar', 'progress_color', 'watermark', 'watermark_position', 'watermark_opacity', 'watermark_scale'];
+  'progress_bar', 'progress_color', 'watermark', 'watermark_position', 'watermark_opacity', 'watermark_scale',
+  'export_width', 'export_quality'];
 const FIELDS = ['llm_provider', 'anthropic_api_key', 'anthropic_model', 'gemini_api_key', 'gemini_model',
   'ollama_base_url', 'ollama_model', 'whisper_model', 'whisper_device', 'use_nvenc', 'transcribe_fillers',
-  'min_clip_seconds', 'max_clip_seconds', 'max_clips', ...STYLE_KEYS];
+  'min_clip_seconds', 'max_clip_seconds', 'max_clips', 'broll_folder', ...STYLE_KEYS];
 const readVal = id => { const el = document.getElementById(id); return !el ? '' : el.type === 'checkbox' ? (el.checked ? 'on' : 'off') : el.value; };
 const formValues = () => Object.fromEntries(FIELDS.map(f => [f, readVal(f)]));
 const readStyle = p => Object.fromEntries(STYLE_KEYS.map(k => [k, readVal(p + k)]));
@@ -346,6 +447,8 @@ function styleBlock(p, s) {
       ${colorF(p + 'highlight_color', 'Highlight colour', s.highlight_color)}
       ${colorF(p + 'accent_color', 'Keyword colour', s.accent_color)}
       ${colorF(p + 'progress_color', 'Progress bar colour', s.progress_color)}
+      ${selectF(p + 'export_width', 'Export size', [['1080', 'Full (1080 wide)'], ['720', 'Smaller (720 wide)']], String(s.export_width))}
+      ${selectF(p + 'export_quality', 'Export quality', [['high', 'High (largest files)'], ['balanced', 'Balanced'], ['small', 'Small files']], s.export_quality)}
       ${numF(p + 'silence_gap', 'Shorten pauses longer than (s)', s.silence_gap, 0.1, 0.3, 3)}
       ${numF(p + 'hook_seconds', 'Hook title shown for (s)', s.hook_seconds, 0.5, 1, 10)}
       ${selectF(p + 'watermark_position', 'Logo position', WMPOS, s.watermark_position)}
@@ -401,27 +504,33 @@ function updatePreview(p) {
   wm.style.opacity = Math.min(Math.max(parseFloat(v('watermark_opacity')) || .85, .1), 1);
   wm.style.top = wm.style.bottom = wm.style.left = wm.style.right = '';
   wm.style[pos[0] === 't' ? 'top' : 'bottom'] = m; wm.style[pos[1] === 'l' ? 'left' : 'right'] = m;
+  if (p === 'ed_' && ED) drawCrop();
 }
 
 function clipCard(p, c, busy) {
   const head = `<div class="row" style="margin-top:12px"><b class="grow">${esc(c.title)}</b><span class="score">${c.score}</span></div>
     <div class="muted small">${fmt(c.start)} – ${fmt(c.end)} in the source · ${esc(c.provider)}</div>`;
   const redo = busy ? '' : `<button class="btn ghost" onclick="restyle(${c.id})">Restyle this clip</button>`;
-  if (c.error) return `<div class="card clip">${head}<div class="err">Render failed: ${esc(c.error)}</div>${redo}</div>`;
+  const edit = busy ? '' : `<button class="btn" onclick="go('editor', ${c.id})">Edit</button>`;
+  if (c.error) return `<div class="card clip">${head}<div class="err">Render failed: ${esc(c.error)}</div><div class="row">${edit}${redo}</div></div>`;
+  if (!c.rendered_at && !c.error) return `<div class="card clip"><div class="muted" style="padding:60px 0;text-align:center">Rendering this clip…</div>${head}</div>`;
   const url = `/media/${p.id}/clips/${encodeURIComponent(c.file)}?v=${c.rendered_at || 0}`;
   const name = (c.title || 'clip').replace(/[^\w\- ]+/g, '').trim().slice(0, 60) || 'clip';
   const secs = c.out_seconds || (c.end - c.start);
-  const tags = [c.layout && c.layout !== 'original' ? { fill: 'follows speaker', split: 'split screen', fit: 'fit on blur' }[c.layout] || c.layout : '',
+  const tags = [c.layout && c.layout !== 'original' ? { fill: 'follows speaker', split: 'split screen', fit: 'fit on blur', manual: 'hand-set crop' }[c.layout] || c.layout : '', c.edits ? 'edited' : '',
     `${Math.round(secs)}s`, c.removed_seconds > 0.2 ? `${c.removed_seconds.toFixed(1)}s of ums/pauses cut` : '']
     .filter(Boolean).map(t => `<span class="tag">${esc(t)}</span>`).join('');
   return `<div class="card clip"><video controls preload="metadata" src="${url}"></video>${head}
     <div class="tags">${tags}</div><p class="small">${esc(c.reason)}</p>
-    <div class="row"><a class="btn ghost" style="text-decoration:none;display:inline-block" href="${url}" download="${esc(name)}.mp4">Download</a>${redo}</div></div>`;
+    <div class="row">${edit}<a class="btn ghost" href="${url}" download="${esc(name)}.mp4">Download</a>
+    <a class="btn ghost" href="/api/clips/${c.id}/srt">Subtitles (.srt)</a>${redo}</div></div>`;
 }
 
 async function restyle(clipId) {
   try {
-    await api(`/projects/${current.id}/render`, json('POST', { opts: readStyle('rs_'), clip_ids: clipId ? [clipId] : null }));
+    const kit = ($('#rs_kit') || {}).value;
+    await api(`/projects/${current.id}/render`, json('POST', { opts: readStyle('rs_'), clip_ids: clipId ? [clipId] : null,
+      kit_id: kit ? Number(kit) : null }));
     go('project', current.id);
   } catch (e) { alert(e.message); }
 }
@@ -432,6 +541,215 @@ async function uploadLogo() {
   catch (e) { msg.innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
 }
 async function removeLogo() { await api('/brand/logo', { method: 'DELETE' }); viewSettings(); }
+
+/* ---------------- clip editor ---------------- */
+let ED = null;
+const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
+async function viewEditor() {
+  const id = current.id;
+  $('#view').innerHTML = '<p class="muted">Loading the editor…</p>';
+  let d, w;
+  try { d = await api('/clips/' + id); w = await api(`/clips/${id}/words?pad=20`); }
+  catch (e) { $('#view').innerHTML = `<div class="err">${esc(e.message)}</div><button class="btn ghost" onclick="go('projects')">Back</button>`; return; }
+  const c = d.clip, e = c.edits || {};
+  ED = { id, pid: d.project.id, video: d.project.video_file, clip: c, words: w.words, start: c.start, end: c.end,
+    lo: Math.max(0, c.start - 20), hi: Math.min(d.project.duration || c.end + 20, c.end + 20),
+    wordEdits: { ...(e.words || {}) }, cuts: new Set(e.cuts || []), crop: e.crop ? { ...e.crop } : null,
+    broll: (e.broll || []).map(b => ({ ...b })), sel: null, nat: null, brollOn: d.broll_enabled, brollList: [] };
+  const style = { ...d.style, watermark_set: SETTINGS.watermark_set };
+  ED.style0 = { ...d.style };
+  $('#view').innerHTML = `
+    <div class="row" style="margin-bottom:16px"><button class="btn ghost" onclick="go('project','${ED.pid}')">← Back to project</button>
+      <h1 class="grow" style="margin:0">Edit clip</h1>
+      <button class="btn" onclick="saveEditor()">Save &amp; render</button></div>
+    <div id="edErr"></div>
+    <div class="ed-grid"><div>
+      <div class="vwrap" id="vwrap"><video id="edv" controls preload="auto" src="/media/${ED.pid}/${encodeURIComponent(ED.video)}"></video>
+        <div class="cropbox" id="cropbox" style="display:none"></div></div>
+      <div class="muted small" style="margin-top:6px">This shows the original video. The finished clip also gets your captions, cleanup and overlays.</div>
+      <div class="card" style="margin-top:14px"><h2>Trim</h2>
+        <div class="tlbar" id="tl"><div class="tlsel" id="tlsel"></div><div class="tlh" id="hS"></div><div class="tlh" id="hE"></div><div class="tlplay" id="tlp"></div></div>
+        <div class="row" style="margin-top:10px">
+          <div class="field" style="margin:0"><label>Start (s)</label><input type="number" id="inS" step="0.1" style="width:110px"></div>
+          <button class="btn ghost" onclick="setFromPlayhead('start')">Start = playhead</button>
+          <div class="field" style="margin:0"><label>End (s)</label><input type="number" id="inE" step="0.1" style="width:110px"></div>
+          <button class="btn ghost" onclick="setFromPlayhead('end')">End = playhead</button>
+          <button class="btn ghost" onclick="playSel()">▶ Play selection</button></div>
+        <div class="small muted" style="margin-top:6px" id="lenInfo"></div></div>
+    </div><div>
+      <div class="card"><h2>Title</h2><input type="text" id="edTitle" class="grow" style="width:100%" maxlength="120" value="${esc(c.title)}"></div>
+      <div class="card"><h2>Captions and cuts</h2>
+        <p class="muted small" style="margin-top:0">Click a word to jump to it. Change its text, hide it from the captions, or cut it out of the video.</p>
+        <div class="chips" id="chips"></div><div id="wordTools" style="margin-top:10px"></div></div>
+      <div class="card"><h2>Framing</h2>
+        <label class="toggle"><input type="checkbox" id="cropOn" onchange="toggleCrop()"> Place the crop by hand (instead of following the speaker)</label>
+        <div id="cropCtl" class="hidden"><div class="field"><label>Zoom: <span id="zoomVal"></span></label>
+          <input type="range" id="zoom" min="1" max="3" step="0.05" oninput="ED.crop.zoom = Number(this.value); drawCrop()"></div>
+          <div class="muted small">Drag the box on the video. It stays the same for the whole clip.</div></div>
+        <div id="cropNote" class="muted small hidden">Hand placement needs a vertical, portrait or square shape.</div></div>
+      ${ED.brollOn ? `<div class="card"><h2>B-roll</h2>
+        <p class="muted small" style="margin-top:0">Cut away to your own footage while the speaker keeps talking.</p>
+        <div class="row"><button class="btn ghost" onclick="loadBroll(true)">Suggest from what is said</button>
+          <button class="btn ghost" onclick="loadBroll(false)">Browse all files</button>
+          <div class="field" style="margin:0"><label>Length (s)</label><input type="number" id="brDur" value="3" min="0.5" max="15" step="0.5" style="width:80px"></div></div>
+        <div id="brOptions" style="margin-top:8px"></div><h2 style="margin-top:14px">In this clip</h2><div id="brUsed"></div></div>`
+        : `<div class="card"><h2>B-roll</h2><p class="muted small" style="margin:0">Set a B-roll folder in Settings to use your own footage here.</p></div>`}
+    </div></div>
+    <div class="card"><h2>Look</h2><p class="muted small" style="margin-top:0">These choices apply to this clip only.</p>${styleBlock('ed_', style)}</div>
+    <div class="row"><button class="btn" onclick="saveEditor()">Save &amp; render</button><span class="muted small">Only this clip is re-rendered.</span></div>`;
+  const v = $('#edv');
+  v.addEventListener('loadedmetadata', () => { ED.nat = { w: v.videoWidth, h: v.videoHeight }; v.currentTime = ED.start; drawCrop(); });
+  v.addEventListener('timeupdate', () => { drawTimeline(); if (ED.playing && v.currentTime >= ED.end) { v.pause(); ED.playing = false; } });
+  $('#inS').onchange = () => setTrim(Number($('#inS').value), ED.end);
+  $('#inE').onchange = () => setTrim(ED.start, Number($('#inE').value));
+  wireTimeline(); wireCrop();
+  $('#cropOn').checked = !!ED.crop; toggleCrop(true);
+  drawTimeline(); drawChips(); drawBrollUsed(); updatePreview('ed_');
+}
+const edT = t => clamp(t, ED.lo, ED.hi);
+const pctT = t => ((t - ED.lo) / (ED.hi - ED.lo) * 100) + '%';
+function setTrim(a, b) {
+  if (!isFinite(a) || !isFinite(b)) return drawTimeline();
+  a = clamp(a, 0, ED.hi); b = clamp(b, 0, ED.hi);
+  if (b - a < 3) { if (b !== ED.end) b = a + 3; else a = b - 3; }
+  if (b - a > 180) { if (b !== ED.end) b = a + 180; else a = b - 180; }
+  ED.start = Math.round(a * 100) / 100; ED.end = Math.round(b * 100) / 100;
+  drawTimeline(); drawChips();
+}
+function snapT(t, kind) {
+  let best = t, d = 0.3;
+  for (const w of ED.words) { const x = kind === 'start' ? w.s : w.e; if (Math.abs(x - t) < d) { d = Math.abs(x - t); best = x; } }
+  return best;
+}
+const changedStyle = () => Object.fromEntries(Object.entries(readStyle('ed_')).filter(([k, v]) => String(v).toLowerCase() !== String(ED.style0[k]).toLowerCase()));
+function wireTimeline() {
+  const tl = $('#tl'), tAt = ev => { const r = tl.getBoundingClientRect(); return ED.lo + clamp((ev.clientX - r.left) / r.width, 0, 1) * (ED.hi - ED.lo); };
+  let drag = null;
+  for (const [id, kind] of [['hS', 'start'], ['hE', 'end']]) {
+    const h = $('#' + id);
+    h.addEventListener('pointerdown', ev => { drag = kind; h.setPointerCapture(ev.pointerId); ev.preventDefault(); ev.stopPropagation(); });
+    h.addEventListener('pointermove', ev => { if (drag !== kind) return; const t = snapT(tAt(ev), kind);
+      kind === 'start' ? setTrim(t, ED.end) : setTrim(ED.start, t); });
+    h.addEventListener('pointerup', () => { drag = null; });
+  }
+  tl.addEventListener('click', ev => { if (ev.target === tl || ev.target.id === 'tlsel') $('#edv').currentTime = tAt(ev); });
+}
+function drawTimeline() {
+  if (!ED) return;
+  const v = $('#edv');
+  $('#tlsel').style.left = pctT(ED.start); $('#tlsel').style.width = ((ED.end - ED.start) / (ED.hi - ED.lo) * 100) + '%';
+  $('#hS').style.left = pctT(ED.start); $('#hE').style.left = pctT(ED.end);
+  $('#tlp').style.left = pctT(edT(v.currentTime || 0));
+  document.querySelectorAll('.tlbr').forEach(n => n.remove());
+  ED.broll.forEach(b => { const n = document.createElement('div'); n.className = 'tlbr';
+    n.style.left = pctT(ED.start + b.at); n.style.width = (b.dur / (ED.hi - ED.lo) * 100) + '%'; $('#tl').appendChild(n); });
+  if (document.activeElement !== $('#inS')) $('#inS').value = ED.start;
+  if (document.activeElement !== $('#inE')) $('#inE').value = ED.end;
+  $('#lenInfo').textContent = `Length ${(ED.end - ED.start).toFixed(1)} s (3 to 180 s). Timeline shows ${fmt(ED.lo)} to ${fmt(ED.hi)} of the video.`;
+}
+function setFromPlayhead(which) { const t = Math.round($('#edv').currentTime * 100) / 100; which === 'start' ? setTrim(t, ED.end) : setTrim(ED.start, t); }
+function playSel() { const v = $('#edv'); v.currentTime = ED.start; ED.playing = true; v.play(); }
+
+/* words */
+function wordState(w) {
+  const t = ED.wordEdits[w.k];
+  return { cut: ED.cuts.has(w.k), hid: t === '', edt: t !== undefined && t !== '' && t !== w.w, text: t === undefined || t === '' ? w.w : t };
+}
+function drawChips() {
+  const inClip = ED.words.filter(w => w.e > ED.start && w.s < ED.end);
+  $('#chips').innerHTML = inClip.length ? inClip.map(w => { const st = wordState(w);
+    return `<button class="chip ${st.cut ? 'cut' : ''} ${st.hid ? 'hid' : ''} ${st.edt ? 'edt' : ''} ${ED.sel === w.k ? 'sel' : ''}" onclick="selWord('${w.k}')">${esc(st.text)}</button>`; }).join('')
+    : '<span class="muted small">No words in this stretch.</span>';
+  const w = ED.words.find(x => x.k === ED.sel);
+  $('#wordTools').innerHTML = !w ? '' : (() => { const st = wordState(w); return `<div class="row">
+    <input type="text" id="wordText" value="${esc(st.text)}" style="width:170px" maxlength="60" onchange="editWord(this.value)">
+    <button class="btn ghost" onclick="toggleCut()">${st.cut ? 'Keep in video' : 'Cut from video'}</button>
+    <button class="btn ghost" onclick="toggleHide()">${st.hid ? 'Show in captions' : 'Hide from captions'}</button>
+    <button class="btn ghost" onclick="resetWord()">Reset</button></div>
+    <div class="muted small" style="margin-top:4px">${w.s.toFixed(2)} s. Cut words disappear from the picture and sound; captions follow.</div>`; })();
+}
+function selWord(k) { ED.sel = k; const w = ED.words.find(x => x.k === k); if (w) $('#edv').currentTime = w.s; drawChips(); }
+function editWord(t) { const w = ED.words.find(x => x.k === ED.sel); if (!w) return; t = t.trim();
+  if (t === '' || t === w.w) delete ED.wordEdits[w.k]; else ED.wordEdits[w.k] = t; drawChips(); }
+function toggleCut() { ED.cuts.has(ED.sel) ? ED.cuts.delete(ED.sel) : ED.cuts.add(ED.sel); drawChips(); }
+function toggleHide() { ED.wordEdits[ED.sel] === '' ? delete ED.wordEdits[ED.sel] : (ED.wordEdits[ED.sel] = ''); drawChips(); }
+function resetWord() { delete ED.wordEdits[ED.sel]; ED.cuts.delete(ED.sel); drawChips(); }
+
+/* crop box */
+const edAspect = () => ({ '9:16': 9 / 16, '1:1': 1, '4:5': 4 / 5 })[readVal('ed_output_aspect')] || null;
+function toggleCrop(initial) {
+  const on = $('#cropOn').checked, a = edAspect();
+  $('#cropOn').disabled = !a; $('#cropNote').classList.toggle('hidden', !!a);
+  if (on && a && !ED.crop) ED.crop = { cx: 0.5, cy: 0.5, zoom: 1 };
+  if (!on) ED.crop = null;
+  $('#cropCtl').classList.toggle('hidden', !ED.crop);
+  if (ED.crop) $('#zoom').value = ED.crop.zoom;
+  if (!initial) drawCrop(); else drawCrop();
+}
+function drawCrop() {
+  const box = $('#cropbox'); if (!box) return;
+  const a = edAspect();
+  if (!a && ED.crop) { /* shape changed to "original": hand placement is not possible */ ED.crop = null; $('#cropOn').checked = false; $('#cropCtl').classList.add('hidden'); }
+  $('#cropOn').disabled = !a; $('#cropNote').classList.toggle('hidden', !!a);
+  if (!ED.crop || !ED.nat) { box.style.display = 'none'; return; }
+  const { w, h } = ED.nat; let cw, ch;
+  if (w / h > a) { ch = h; cw = h * a; } else { cw = w; ch = w / a; }
+  const z = ED.crop.zoom, fw = cw / w / z, fh = ch / h / z;
+  ED.crop.cx = clamp(ED.crop.cx, fw / 2, 1 - fw / 2); ED.crop.cy = clamp(ED.crop.cy, fh / 2, 1 - fh / 2);
+  box.style.display = 'block'; box.style.width = (fw * 100) + '%'; box.style.height = (fh * 100) + '%';
+  box.style.left = ((ED.crop.cx - fw / 2) * 100) + '%'; box.style.top = ((ED.crop.cy - fh / 2) * 100) + '%';
+  $('#zoomVal').textContent = ED.crop.zoom.toFixed(2) + '×';
+}
+function wireCrop() {
+  const box = $('#cropbox'), wrap = $('#vwrap'); let last = null;
+  box.addEventListener('pointerdown', ev => { last = [ev.clientX, ev.clientY]; box.setPointerCapture(ev.pointerId); ev.preventDefault(); });
+  box.addEventListener('pointermove', ev => { if (!last || !ED.crop) return; const r = wrap.getBoundingClientRect();
+    ED.crop.cx += (ev.clientX - last[0]) / r.width; ED.crop.cy += (ev.clientY - last[1]) / r.height; last = [ev.clientX, ev.clientY]; drawCrop(); });
+  box.addEventListener('pointerup', () => { last = null; });
+}
+
+/* B-roll */
+const baseName = p => String(p).split(/[\\/]/).pop();
+async function loadBroll(suggest) {
+  const el = $('#brOptions'); el.innerHTML = '<span class="muted small">Looking…</span>';
+  try {
+    const items = suggest ? (await api('/broll/suggest?clip_id=' + ED.id)).suggestions : (await api('/broll/list')).slice(0, 60);
+    ED.brollList = items;
+    el.innerHTML = items.length ? items.map((it, i) => `<div class="brl"><img src="/api/broll/thumb?path=${encodeURIComponent(it.path)}" alt="" onerror="this.style.visibility='hidden'">
+      <div class="grow"><div>${esc(it.name)}</div><div class="muted small">${it.matched ? 'matches: ' + esc(it.matched.join(', ')) : esc(it.rel)}</div></div>
+      ${it.matched ? `<button class="btn ghost" onclick="addBroll(${i}, ${it.at})">Insert at ${fmt(it.at)}</button>` : ''}
+      <button class="btn ghost" onclick="addBroll(${i})">Insert at playhead</button></div>`).join('')
+      : `<span class="muted small">${suggest ? 'No file names match what is said. Try "Browse all files".' : 'The folder has no videos or pictures.'}</span>`;
+  } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+function addBroll(i, at) {
+  const it = ED.brollList[i], len = ED.end - ED.start;
+  if (at === undefined) at = $('#edv').currentTime - ED.start;
+  at = clamp(at, 0, Math.max(len - 0.5, 0));
+  const dur = clamp(Number($('#brDur').value) || 3, 0.5, Math.min(15, len - at));
+  ED.broll.push({ path: it.path, at: Math.round(at * 100) / 100, dur: Math.round(dur * 100) / 100 });
+  drawBrollUsed(); drawTimeline();
+}
+function drawBrollUsed() {
+  const el = $('#brUsed'); if (!el) return;
+  el.innerHTML = ED.broll.length ? ED.broll.map((b, i) => `<div class="brl"><div class="grow">${esc(baseName(b.path))}
+    <div class="muted small">from ${b.at.toFixed(1)} s into the clip, for ${b.dur.toFixed(1)} s</div></div>
+    <button class="btn danger" onclick="ED.broll.splice(${i},1); drawBrollUsed(); drawTimeline()">Remove</button></div>`).join('')
+    : '<span class="muted small">None yet.</span>';
+}
+
+async function saveEditor() {
+  const edits = {};
+  const words = Object.fromEntries(Object.entries(ED.wordEdits));
+  if (Object.keys(words).length) edits.words = words;
+  if (ED.cuts.size) edits.cuts = [...ED.cuts];
+  if (ED.crop) edits.crop = ED.crop;
+  if (ED.broll.length) edits.broll = ED.broll.map(({ path, at, dur }) => ({ path, at, dur }));
+  try {
+    await api('/clips/' + ED.id, json('PUT', { title: $('#edTitle').value, start: ED.start, end: ED.end, edits, opts: changedStyle() }));
+    go('project', ED.pid);
+  } catch (e) { $('#edErr').innerHTML = `<div class="err">${esc(e.message)}</div>`; window.scrollTo(0, 0); }
+}
 
 loadSettings().then(() => go('projects'));
 </script>
