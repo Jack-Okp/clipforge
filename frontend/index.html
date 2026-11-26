@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClipForge</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #181b22; --panel2: #20242d; --line: #2c313c;
+    --text: #e8eaf0; --muted: #8b93a3; --accent: #7c5cff; --accent2: #5b3fe0;
+    --ok: #3ecf8e; --warn: #f5a524; --bad: #ff5d6c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 24px; padding: 14px 28px;
+           border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5; }
+  .logo { font-weight: 700; font-size: 18px; letter-spacing: .3px; }
+  .logo span { color: var(--accent); }
+  nav { display: flex; gap: 6px; }
+  nav button { background: none; border: 0; color: var(--muted); padding: 8px 14px; border-radius: 8px;
+               cursor: pointer; font: inherit; }
+  nav button.active, nav button:hover { background: var(--panel2); color: var(--text); }
+  .pill { margin-left: auto; font-size: 13px; color: var(--muted); background: var(--panel2);
+          padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line); }
+  main { max-width: 1100px; margin: 0 auto; padding: 28px; }
+  h1 { font-size: 22px; margin: 0 0 18px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 18px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  input[type=text], input[type=password], input[type=number], select {
+    background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; font: inherit; min-width: 0; }
+  input:focus, select:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .grow { flex: 1; }
+  button.btn { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 10px 18px;
+               font: inherit; font-weight: 600; cursor: pointer; }
+  button.btn:hover { background: var(--accent2); }
+  button.btn.ghost { background: var(--panel2); color: var(--text); border: 1px solid var(--line); }
+  button.btn.danger { background: transparent; color: var(--bad); border: 1px solid var(--bad); }
+  button.btn:disabled { opacity: .5; cursor: default; }
+  .muted { color: var(--muted); } .small { font-size: 13px; }
+  .proj { display: flex; align-items: center; gap: 16px; padding: 14px 18px; cursor: pointer; }
+  .proj:hover { border-color: var(--accent); }
+  .proj .title { font-weight: 600; }
+  .badge { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--line); }
+  .badge.done { color: var(--ok); } .badge.failed { color: var(--bad); }
+  .badge.running, .badge.queued { color: var(--warn); } .badge.cancelled { color: var(--muted); }
+  .bar { height: 8px; background: var(--panel2); border-radius: 99px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+  .clips { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; }
+  .clip video { width: 100%; border-radius: 8px; background: #000; max-height: 260px; }
+  .score { font-weight: 700; padding: 2px 10px; border-radius: 8px; background: var(--panel2); }
+  .providers { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .prov { border: 2px solid var(--line); border-radius: 12px; padding: 16px; cursor: pointer; background: var(--panel); }
+  .prov.sel { border-color: var(--accent); background: #1c1936; }
+  .prov h3 { margin: 0 0 4px; font-size: 16px; }
+  .field { display: flex; flex-direction: column; gap: 5px; margin-top: 12px; }
+  .field label { font-size: 13px; color: var(--muted); }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  .err { color: var(--bad); background: #2a1519; border: 1px solid #4a2028; padding: 10px 14px; border-radius: 8px; margin: 10px 0; }
+  .hidden { display: none; }
+  .tr { max-height: 320px; overflow: auto; font-size: 14px; }
+  .tr p { margin: 0 0 6px; } .tr b { color: var(--accent); font-weight: 500; font-size: 12px; margin-right: 8px; }
+  .clip video { width: 100%; max-height: 440px; border-radius: 8px; background: #000; object-fit: contain; }
+  a.btn { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+          padding: 10px 18px; font-weight: 600; text-decoration: none; display: inline-block; cursor: pointer; }
+  a.btn:hover { border-color: var(--accent); }
+  .tag { font-size: 12px; color: var(--muted); background: var(--panel2); border: 1px solid var(--line); padding: 2px 8px; border-radius: 6px; }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .style-grid { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+  .style-controls { flex: 1; min-width: 300px; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 16px; }
+  .style-controls .field { margin-top: 8px; }
+  .toggles { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 10px; }
+  .toggle { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+  input[type=color] { padding: 2px; height: 40px; width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+  details summary { cursor: pointer; font-weight: 600; }
+  .pv { width: 150px; position: relative; overflow: hidden; border-radius: 12px; border: 1px solid var(--line); flex: none;
+        background: linear-gradient(160deg, #6a5a9a, #2a3a5e 55%, #4a3030); }
+  .pv .cap { position: absolute; left: 5%; right: 5%; text-align: center; line-height: 1.15; padding: 2px 4px; border-radius: 4px; }
+  .pv .hookpv { position: absolute; left: 12%; right: 12%; text-align: center; background: #fff; color: #000; font-weight: 800;
+                padding: 3px 5px; border-radius: 3px; display: none; }
+  .pv .barpv { position: absolute; left: 0; bottom: 0; height: 4px; width: 60%; display: none; }
+  .pv .wmpv { position: absolute; width: 26%; height: 9%; background: #c0f; border-radius: 2px; display: none; }
+  .pvnote { font-size: 12px; color: var(--muted); max-width: 150px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Clip<span>Forge</span></div>
+  <nav>
+    <button id="nav-projects" class="active" onclick="go('projects')">Projects</button>
+    <button id="nav-settings" onclick="go('settings')">Settings</button>
+  </nav>
+  <div class="pill" id="activeModel">…</div>
+</header>
+<main id="view"></main>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const api = async (path, opts = {}) => {
+  const r = await fetch('/api' + path, opts);
+  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch {} throw new Error(m); }
+  return r.json();
+};
+const json = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+const fmt = s => { s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const STAGES = { queued: 'Waiting in queue', ingest: 'Getting video', transcribe: 'Transcribing speech',
+                 highlights: 'Finding best moments', export: 'Cutting clips', render: 'Styling clips', done: 'Done' };
+let timer = null, current = { view: 'projects', id: null }, SETTINGS = null, PROVIDERS = [];
+
+async function loadSettings() {
+  const d = await api('/settings');
+  SETTINGS = d.settings; PROVIDERS = d.providers;
+  const p = PROVIDERS.find(p => p.id === SETTINGS.llm_provider);
+  $('#activeModel').textContent = 'AI: ' + (p ? p.label : SETTINGS.llm_provider);
+}
+
+function go(view, id = null) {
+  clearInterval(timer);
+  current = { view, id };
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  $('#nav-' + (view === 'settings' ? 'settings' : 'projects')).classList.add('active');
+  ({ projects: viewProjects, project: viewProject, settings: viewSettings })[view]();
+}
+
+/* ---------------- projects list ---------------- */
+async function viewProjects() {
+  $('#view').innerHTML = `
+    <h1>New project</h1>
+    <div class="card">
+      <div class="row">
+        <input id="url" type="text" class="grow" placeholder="Paste a YouTube or video link">
+        <button class="btn" onclick="submitUrl()">Find clips</button>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <span class="muted small">or upload a file:</span>
+        <input id="file" type="file" accept="video/*">
+        <button class="btn ghost" onclick="submitFile()">Upload</button>
+      </div>
+      <div id="newErr"></div>
+    </div>
+    <h1>Projects</h1><div id="list"></div>`;
+  const draw = async () => {
+    const list = await api('/projects');
+    $('#list').innerHTML = list.length ? list.map(p => `
+      <div class="card proj" onclick="go('project','${p.id}')">
+        <div class="grow"><div class="title">${esc(p.title)}</div>
+          <div class="muted small">${p.duration ? fmt(p.duration) + ' · ' : ''}${p.created_at}</div></div>
+        ${p.status === 'running' || p.status === 'queued'
+          ? `<div style="width:160px"><div class="bar"><i style="width:${p.progress * 100}%"></i></div>
+             <div class="muted small">${STAGES[p.stage] || p.stage}</div></div>` : ''}
+        <span class="badge ${p.status}">${p.status}</span>
+      </div>`).join('') : '<p class="muted">No projects yet. Paste a link above to start.</p>';
+  };
+  draw(); timer = setInterval(draw, 2500);
+}
+async function submit(fd) {
+  try { const r = await api('/projects', { method: 'POST', body: fd }); go('project', r.id); }
+  catch (e) { $('#newErr').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+function submitUrl() { const fd = new FormData(); fd.append('url', $('#url').value); submit(fd); }
+function submitFile() { const f = $('#file').files[0]; if (!f) return; const fd = new FormData(); fd.append('file', f); submit(fd); }
+
+/* ---------------- one project ---------------- */
+async function viewProject() {
+  const id = current.id;
+  $('#view').innerHTML = '<div id="p"></div>';
+  const draw = async () => {
+    let p; try { p = await api('/projects/' + id); } catch { return go('projects'); }
+    const busy = p.status === 'running' || p.status === 'queued';
+    const opts = PROVIDERS.map(x => `<option value="${x.id}" ${x.id === SETTINGS.llm_provider ? 'selected' : ''}>${esc(x.label)}</option>`).join('');
+    $('#p').innerHTML = `
+      <div class="row" style="margin-bottom:16px">
+        <button class="btn ghost" onclick="go('projects')">← Back</button>
+        <h1 class="grow" style="margin:0">${esc(p.title)}</h1>
+        <span class="badge ${p.status}">${p.status}</span>
+      </div>
+      ${busy ? `<div class="card"><div class="row"><div class="grow">
+          <div class="bar"><i style="width:${p.progress * 100}%"></i></div>
+          <div class="muted small" style="margin-top:6px">${STAGES[p.stage] || p.stage} · ${Math.round(p.progress * 100)}%</div></div>
+          <button class="btn danger" onclick="act('cancel')">Cancel</button></div></div>` : ''}
+      ${p.error ? `<div class="err">${esc(p.error)}</div>` : ''}
+      ${!busy ? `<div class="card"><div class="row">
+          <span class="muted">Re-pick clips with:</span>
+          <select id="rerunProv">${opts}</select>
+          <button class="btn ghost" onclick="act('rerun', document.getElementById('rerunProv').value)">Run again</button>
+          <span class="grow"></span>
+          <button class="btn danger" onclick="del()">Delete project</button></div>
+          <div class="muted small" style="margin-top:8px">Reuses the existing transcript, so switching models is quick.${p.provider_used ? ' Last run used: ' + esc(p.provider_used) + '.' : ''}</div></div>` : ''}
+      ${!busy && p.clips.length ? `<details class="card" ontoggle="updatePreview('rs_')">
+          <summary>Restyle clips (shape, captions, cleanup, overlays)</summary>
+          <p class="muted small">Re-renders from the original video and reuses the transcript and the AI's picks, so it is much faster than starting over.</p>
+          ${styleBlock('rs_', SETTINGS)}
+          <div class="row" style="margin-top:16px"><button class="btn" onclick="restyle(null)">Re-render all clips</button>
+            <span class="muted small">Your logo is managed in Settings.</span></div></details>` : ''}
+      <div class="clips">${p.clips.map(c => clipCard(p, c, busy)).join('')}</div>
+      <div id="tr"></div>`;
+    if (!busy) { clearInterval(timer); loadTranscript(id); updatePreview('rs_'); }
+  };
+  await draw(); timer = setInterval(draw, 2000);
+}
+async function loadTranscript(id) {
+  try {
+    const t = await api(`/projects/${id}/transcript`);
+    $('#tr').innerHTML = `<div class="card"><h2>Transcript (${esc(t.language)}, ran on ${esc(t.device)})</h2>` +
+      (t.gpu_error ? `<div class="err small">The GPU could not be used, so the CPU did the work (slower). Reason: ${esc(t.gpu_error)}</div>` : '') +
+      `<div class="tr">` +
+      t.segments.map(s => `<p><b>${fmt(s.start)}</b>${esc(s.text)}</p>`).join('') + '</div></div>';
+  } catch {}
+}
+async function act(what, provider) {
+  await api(`/projects/${current.id}/${what}`, json('POST', provider ? { provider } : {}));
+  go('project', current.id);
+}
+async function del() {
+  if (!confirm('Delete this project and all its clips?')) return;
+  await api('/projects/' + current.id, { method: 'DELETE' }); go('projects');
+}
+
+/* ---------------- settings & model switching ---------------- */
+async function viewSettings() {
+  await loadSettings();
+  const s = SETTINGS;
+  const secret = (id, label, key) => `
+    <div class="field"><label>${label}</label>
+      <div class="row"><input id="${id}" type="password" class="grow" autocomplete="off"
+        placeholder="${s[key + '_set'] ? 'Saved (' + s[key + '_hint'] + ') — leave blank to keep' : 'Paste API key'}">
+        ${s[key + '_set'] ? `<button class="btn ghost" onclick="clearKey('${key === 'anthropic_api_key' ? 'claude' : 'gemini'}')">Remove</button>` : ''}</div></div>`;
+  $('#view').innerHTML = `
+    <h1>AI model</h1>
+    <p class="muted">Choose which model finds your clips. Switch any time; keys are stored only on this computer.</p>
+    <div class="providers">
+      ${PROVIDERS.map(p => `<div class="prov ${s.llm_provider === p.id ? 'sel' : ''}" onclick="pick('${p.id}')" id="prov-${p.id}">
+        <h3>${esc(p.label)}</h3>
+        <div class="muted small">${{ claude: 'Best quality. Needs API key + internet.', gemini: 'Fast, large context. Needs API key + internet.', ollama: 'Runs on your PC. No key, fully offline, slower on 4 GB GPU.' }[p.id]}</div>
+      </div>`).join('')}
+    </div>
+    <input type="hidden" id="llm_provider" value="${esc(s.llm_provider)}">
+
+    <div class="card" style="margin-top:18px" id="cfg-claude">
+      <h2>Claude</h2>${secret('anthropic_api_key', 'Anthropic API key', 'anthropic_api_key')}
+      <div class="field"><label>Model</label><input id="anthropic_model" type="text" value="${esc(s.anthropic_model)}"></div>
+      <div class="row" style="margin-top:14px"><button class="btn ghost" onclick="testProv('claude')">Test connection</button><span id="t-claude"></span></div>
+    </div>
+    <div class="card" id="cfg-gemini">
+      <h2>Gemini</h2>${secret('gemini_api_key', 'Gemini API key', 'gemini_api_key')}
+      <div class="field"><label>Model</label><input id="gemini_model" type="text" value="${esc(s.gemini_model)}"></div>
+      <div class="row" style="margin-top:14px"><button class="btn ghost" onclick="testProv('gemini')">Test connection</button><span id="t-gemini"></span></div>
+    </div>
+    <div class="card" id="cfg-ollama">
+      <h2>Ollama (local)</h2>
+      <div class="field"><label>Server address</label><input id="ollama_base_url" type="text" value="${esc(s.ollama_base_url)}"></div>
+      <div class="field"><label>Model</label>
+        <div class="row"><select id="ollama_model_sel" class="grow" onchange="$('#ollama_model').value=this.value"></select>
+        <button class="btn ghost" onclick="loadOllama()">Refresh list</button></div>
+        <input id="ollama_model" type="text" value="${esc(s.ollama_model)}" placeholder="or type a model name, e.g. llama3.1:8b"></div>
+      <div class="row" style="margin-top:14px"><button class="btn ghost" onclick="testProv('ollama')">Test connection</button><span id="t-ollama"></span></div>
+    </div>
+
+    <h1>How finished clips look</h1>
+    <p class="muted">These are the defaults for every new project. You can restyle any project later without re-running the AI.</p>
+    <div class="card">
+      ${styleBlock('', s)}
+      <div class="row" style="margin-top:18px">
+        ${s.watermark_set ? `<img src="/api/brand/logo?${Date.now()}" alt="logo" style="height:40px;border-radius:6px;background:#333">` : '<span class="muted small">No logo uploaded yet</span>'}
+        <input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp">
+        <button class="btn ghost" onclick="uploadLogo()">Upload logo</button>
+        ${s.watermark_set ? '<button class="btn danger" onclick="removeLogo()">Remove logo</button>' : ''}
+        <span id="logoMsg" class="small"></span>
+      </div>
+      <div class="muted small" style="margin-top:6px">A logo uploads straight away. Other changes apply when you press Save settings.</div>
+    </div>
+
+    <h1>Transcription &amp; export</h1>
+    <div class="card"><div class="row">
+      <div class="field"><label>Keep "um"/"uh" in transcript</label><select id="transcribe_fillers">
+        ${['on', 'off'].map(m => `<option ${s.transcribe_fillers === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
+      <div class="field"><label>Whisper model</label><select id="whisper_model">
+        ${['tiny', 'base', 'small', 'medium'].map(m => `<option ${s.whisper_model === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
+      <div class="field"><label>Device</label><select id="whisper_device">
+        ${['auto', 'cuda', 'cpu'].map(m => `<option ${s.whisper_device === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
+      <div class="field"><label>GPU video encoding</label><select id="use_nvenc">
+        ${['auto', 'on', 'off'].map(m => `<option ${s.use_nvenc === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
+      <div class="field"><label>Min clip (s)</label><input id="min_clip_seconds" type="number" value="${esc(s.min_clip_seconds)}" style="width:90px"></div>
+      <div class="field"><label>Max clip (s)</label><input id="max_clip_seconds" type="number" value="${esc(s.max_clip_seconds)}" style="width:90px"></div>
+      <div class="field"><label>Max clips</label><input id="max_clips" type="number" value="${esc(s.max_clips)}" style="width:90px"></div>
+    </div></div>
+    <div class="row"><button class="btn" onclick="saveSettings()">Save settings</button><span id="saved"></span></div>`;
+  loadOllama(); updatePreview('');
+}
+function pick(id) {
+  $('#llm_provider').value = id;
+  PROVIDERS.forEach(p => $('#prov-' + p.id).classList.toggle('sel', p.id === id));
+}
+const STYLE_KEYS = ['output_aspect', 'layout', 'caption_style', 'caption_position', 'caption_color', 'highlight_color',
+  'accent_color', 'remove_fillers', 'remove_silence', 'silence_gap', 'normalize_audio', 'hook_title', 'hook_seconds',
+  'progress_bar', 'progress_color', 'watermark', 'watermark_position', 'watermark_opacity', 'watermark_scale'];
+const FIELDS = ['llm_provider', 'anthropic_api_key', 'anthropic_model', 'gemini_api_key', 'gemini_model',
+  'ollama_base_url', 'ollama_model', 'whisper_model', 'whisper_device', 'use_nvenc', 'transcribe_fillers',
+  'min_clip_seconds', 'max_clip_seconds', 'max_clips', ...STYLE_KEYS];
+const readVal = id => { const el = document.getElementById(id); return !el ? '' : el.type === 'checkbox' ? (el.checked ? 'on' : 'off') : el.value; };
+const formValues = () => Object.fromEntries(FIELDS.map(f => [f, readVal(f)]));
+const readStyle = p => Object.fromEntries(STYLE_KEYS.map(k => [k, readVal(p + k)]));
+async function saveSettings() {
+  try { await api('/settings', json('PUT', formValues())); await loadSettings();
+        $('#saved').innerHTML = '<span class="ok">Saved ✓</span>'; setTimeout(viewSettings, 700); }
+  catch (e) { $('#saved').innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
+}
+async function testProv(id) {
+  const out = $('#t-' + id); out.innerHTML = '<span class="muted">Testing…</span>';
+  const d = await api('/settings/test', json('POST', { provider: id, values: formValues() }));
+  out.innerHTML = d.ok ? '<span class="ok">Connected ✓</span>' : `<span class="bad">${esc(d.error)}</span>`;
+}
+async function clearKey(p) { await api('/settings/key/' + p, { method: 'DELETE' }); viewSettings(); }
+async function loadOllama() {
+  const sel = $('#ollama_model_sel'); if (!sel) return;
+  const d = await api('/ollama/models?base_url=' + encodeURIComponent($('#ollama_base_url').value));
+  sel.innerHTML = d.ok && d.models.length
+    ? d.models.map(m => `<option ${m === $('#ollama_model').value ? 'selected' : ''}>${esc(m)}</option>`).join('')
+    : `<option>${d.ok ? 'No models pulled yet' : 'Ollama not reachable'}</option>`;
+}
+
+/* ---------------- clip style controls (shared by Settings and each project) ---------------- */
+const SHAPES = [['9:16', 'Vertical 9:16 (TikTok, Reels, Shorts)'], ['4:5', 'Portrait 4:5'], ['1:1', 'Square 1:1'], ['original', 'Original shape']];
+const FRAMINGS = [['auto', 'Auto (recommended)'], ['fill', 'Follow the speaker'], ['split', 'Split screen for two people'], ['fit', 'Whole picture on a blur']];
+const CAPSTYLES = [['bold', 'Bold (big, one word lit)'], ['pop', 'Pop (words bounce in)'], ['classic', 'Classic'], ['karaoke', 'Karaoke sweep'], ['minimal', 'Minimal box'], ['none', 'No captions']];
+const CAPPOS = [['lower', 'Lower'], ['center', 'Center'], ['top', 'Top']];
+const WMPOS = [['tr', 'Top right'], ['tl', 'Top left'], ['br', 'Bottom right'], ['bl', 'Bottom left']];
+const selectF = (id, label, opts, val) => `<div class="field"><label>${label}</label><select id="${id}">${opts.map(([v, t]) =>
+  `<option value="${v}" ${v === val ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>`;
+const colorF = (id, label, val) => `<div class="field"><label>${label}</label><input type="color" id="${id}" value="${esc(val)}"></div>`;
+const numF = (id, label, val, step, min, max) => `<div class="field"><label>${label}</label>
+  <input type="number" id="${id}" value="${esc(val)}" step="${step}" min="${min}" max="${max}"></div>`;
+const toggleF = (id, label, val) => `<label class="toggle"><input type="checkbox" id="${id}" ${val === 'on' ? 'checked' : ''}> ${label}</label>`;
+
+function styleBlock(p, s) {
+  return `<div class="style-grid" oninput="updatePreview('${p}')" onchange="updatePreview('${p}')">
+    <div class="style-controls">
+      ${selectF(p + 'output_aspect', 'Shape', SHAPES, s.output_aspect)}
+      ${selectF(p + 'layout', 'Framing', FRAMINGS, s.layout)}
+      ${selectF(p + 'caption_style', 'Captions', CAPSTYLES, s.caption_style)}
+      ${selectF(p + 'caption_position', 'Caption position', CAPPOS, s.caption_position)}
+      ${colorF(p + 'caption_color', 'Text colour', s.caption_color)}
+      ${colorF(p + 'highlight_color', 'Highlight colour', s.highlight_color)}
+      ${colorF(p + 'accent_color', 'Keyword colour', s.accent_color)}
+      ${colorF(p + 'progress_color', 'Progress bar colour', s.progress_color)}
+      ${numF(p + 'silence_gap', 'Shorten pauses longer than (s)', s.silence_gap, 0.1, 0.3, 3)}
+      ${numF(p + 'hook_seconds', 'Hook title shown for (s)', s.hook_seconds, 0.5, 1, 10)}
+      ${selectF(p + 'watermark_position', 'Logo position', WMPOS, s.watermark_position)}
+      ${numF(p + 'watermark_opacity', 'Logo opacity (0.1 to 1)', s.watermark_opacity, 0.05, 0.1, 1)}
+      ${numF(p + 'watermark_scale', 'Logo width (share of video)', s.watermark_scale, 0.01, 0.05, 0.5)}
+      <div class="toggles">
+        ${toggleF(p + 'remove_fillers', 'Remove "um" and "uh"', s.remove_fillers)}
+        ${toggleF(p + 'remove_silence', 'Shorten long pauses', s.remove_silence)}
+        ${toggleF(p + 'normalize_audio', 'Even out loudness', s.normalize_audio)}
+        ${toggleF(p + 'hook_title', 'Hook title at the start', s.hook_title)}
+        ${toggleF(p + 'progress_bar', 'Progress bar', s.progress_bar)}
+        ${toggleF(p + 'watermark', s.watermark_set ? 'Logo watermark' : 'Logo watermark (upload a logo in Settings first)', s.watermark)}
+      </div>
+    </div>
+    <div><div class="pv" id="${p}pv"><div class="hookpv">Your hook title</div><div class="cap"></div><div class="wmpv"></div><div class="barpv"></div></div>
+      <div class="pvnote">Approximate preview. Fonts and spacing in the real clip may differ slightly.</div></div>
+  </div>`;
+}
+
+function updatePreview(p) {
+  const box = document.getElementById(p + 'pv'); if (!box) return;
+  const v = k => readVal(p + k), aspect = v('output_aspect');
+  box.style.aspectRatio = ({ '9:16': '9/16', '1:1': '1/1', '4:5': '4/5', original: '16/9' })[aspect] || '9/16';
+  box.style.width = aspect === 'original' ? '240px' : '150px';
+  const w = box.clientWidth, h = box.clientHeight; if (!w || !h) return;
+  const unit = Math.min(w, h * 0.75), vertical = h >= w * 1.2, st = v('caption_style');
+  const spec = { bold: [.098, 900, 1], pop: [.105, 900, 1], classic: [.072, 700, 0], karaoke: [.078, 700, 0], minimal: [.056, 400, 0] }[st];
+  const cap = box.querySelector('.cap');
+  cap.style.display = spec ? 'block' : 'none';
+  if (spec) {
+    const hl = v('highlight_color'), ac = v('accent_color'), pos = v('caption_position');
+    cap.style.fontSize = (spec[0] * unit) + 'px'; cap.style.fontWeight = spec[1];
+    cap.style.textTransform = spec[2] ? 'uppercase' : 'none';
+    cap.style.color = v('caption_color');
+    cap.style.background = st === 'minimal' ? 'rgba(0,0,0,.55)' : 'none';
+    cap.style.textShadow = st === 'minimal' ? 'none' : '0 0 2px #000, 0 0 3px #000, 1px 1px 2px #000';
+    cap.innerHTML = st === 'minimal' ? 'Stop scrolling and watch this'
+      : st === 'karaoke' ? `<span style="color:${hl}">Stop scroll</span>ing and watch`
+      : `Stop <span style="color:${hl}">scrolling</span> <span style="color:${ac}">$500</span>`;
+    cap.style.top = cap.style.bottom = cap.style.transform = '';
+    if (pos === 'center') { cap.style.top = '50%'; cap.style.transform = 'translateY(-50%)'; }
+    else if (pos === 'top') cap.style.top = (h * (vertical ? .25 : .15)) + 'px';
+    else cap.style.bottom = (h * (vertical ? .20 : aspect === '1:1' || aspect === '4:5' ? .10 : .08)) + 'px';
+  }
+  const hook = box.querySelector('.hookpv');
+  hook.style.display = v('hook_title') === 'on' ? 'block' : 'none';
+  hook.style.fontSize = (.06 * unit) + 'px'; hook.style.top = (h * (vertical ? .09 : .06)) + 'px';
+  const bar = box.querySelector('.barpv');
+  bar.style.display = v('progress_bar') === 'on' ? 'block' : 'none'; bar.style.background = v('progress_color');
+  const wm = box.querySelector('.wmpv'), m = (w * .04) + 'px', pos = v('watermark_position');
+  wm.style.display = v('watermark') === 'on' ? 'block' : 'none';
+  wm.style.width = (Math.min(Math.max(parseFloat(v('watermark_scale')) || .16, .05), .5) * 100) + '%';
+  wm.style.opacity = Math.min(Math.max(parseFloat(v('watermark_opacity')) || .85, .1), 1);
+  wm.style.top = wm.style.bottom = wm.style.left = wm.style.right = '';
+  wm.style[pos[0] === 't' ? 'top' : 'bottom'] = m; wm.style[pos[1] === 'l' ? 'left' : 'right'] = m;
+}
+
+function clipCard(p, c, busy) {
+  const head = `<div class="row" style="margin-top:12px"><b class="grow">${esc(c.title)}</b><span class="score">${c.score}</span></div>
+    <div class="muted small">${fmt(c.start)} – ${fmt(c.end)} in the source · ${esc(c.provider)}</div>`;
+  const redo = busy ? '' : `<button class="btn ghost" onclick="restyle(${c.id})">Restyle this clip</button>`;
+  if (c.error) return `<div class="card clip">${head}<div class="err">Render failed: ${esc(c.error)}</div>${redo}</div>`;
+  const url = `/media/${p.id}/clips/${encodeURIComponent(c.file)}?v=${c.rendered_at || 0}`;
+  const name = (c.title || 'clip').replace(/[^\w\- ]+/g, '').trim().slice(0, 60) || 'clip';
+  const secs = c.out_seconds || (c.end - c.start);
+  const tags = [c.layout && c.layout !== 'original' ? { fill: 'follows speaker', split: 'split screen', fit: 'fit on blur' }[c.layout] || c.layout : '',
+    `${Math.round(secs)}s`, c.removed_seconds > 0.2 ? `${c.removed_seconds.toFixed(1)}s of ums/pauses cut` : '']
+    .filter(Boolean).map(t => `<span class="tag">${esc(t)}</span>`).join('');
+  return `<div class="card clip"><video controls preload="metadata" src="${url}"></video>${head}
+    <div class="tags">${tags}</div><p class="small">${esc(c.reason)}</p>
+    <div class="row"><a class="btn ghost" style="text-decoration:none;display:inline-block" href="${url}" download="${esc(name)}.mp4">Download</a>${redo}</div></div>`;
+}
+
+async function restyle(clipId) {
+  try {
+    await api(`/projects/${current.id}/render`, json('POST', { opts: readStyle('rs_'), clip_ids: clipId ? [clipId] : null }));
+    go('project', current.id);
+  } catch (e) { alert(e.message); }
+}
+async function uploadLogo() {
+  const f = $('#logoFile').files[0], msg = $('#logoMsg'); if (!f) { msg.innerHTML = '<span class="bad">Choose an image first</span>'; return; }
+  const fd = new FormData(); fd.append('file', f);
+  try { await api('/brand/logo', { method: 'POST', body: fd }); viewSettings(); }
+  catch (e) { msg.innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
+}
+async function removeLogo() { await api('/brand/logo', { method: 'DELETE' }); viewSettings(); }
+
+loadSettings().then(() => go('projects'));
+</script>
+</body>
+</html>
